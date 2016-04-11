@@ -12,15 +12,15 @@ function start(response) {
     '<input type="text" name="text"></input>'+
     '<input type="submit" value="입력" />'+
     '</form>'+'</body>'+'</html>';
-  response.writeHead(200, {"Content-Type" : "text/html"});
+  response.writeHead(200, {"Content-Type" : "text/html;charset=UTF-8"});
   response.write(body);
   response.end();
 }
 
 function hello(response, postData) {
   console.log("Request handler 'hello' was called.");
-  response.writeHead(200, {"Content-Type" : "text/plain"});
-  response.write("안녕하세요. "+ querystring.parse(postData).text + "님");
+  response.writeHead(200, {"Content-Type" : "text/plain;charset=UTF-8"});
+  response.write("소원이 입력되었습니다. - "+ querystring.parse(postData).text);
   response.end();
 }
 
