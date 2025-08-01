@@ -89,7 +89,7 @@
       };
 
       // 백엔드 API 호출
-      const response = await fetch('http://localhost:5847/process-all', {
+      const response = await fetch('http://localhost:5847/api/process-all', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

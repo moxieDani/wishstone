@@ -8,11 +8,12 @@ app = Flask(__name__)
 CORS(app)
 
 # Blueprint 등록
-app.register_blueprint(bp)
+app.register_blueprint(bp, url_prefix='/api')
 
 @app.route("/")
 def index():
     return {"message": "Backend API Server is running"}
 
 if __name__ == "__main__":
+    print("🚀 WishStone Backend API Server 시작...")   
     app.run(debug=True, port=5847)
