@@ -24,8 +24,8 @@ class Category(BaseModel):
     sentiment: Literal["Positive", "Negative", "Nutural"]
 
 # LangChain을 통한 LLM 초기화
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-prompt = PromptTemplate.from_template("다음 텍스트를 분석해서 wish_type과 sentiment를 분류해주세요: {context}")
+llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+prompt = PromptTemplate.from_template("{context}")
 chain = prompt | llm.with_structured_output(Category)
 
 def init_database():
@@ -50,6 +50,7 @@ def init_database():
             cursor.execute("""
             CREATE TABLE WishStone_Records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_ip TEXT,
                 user_text TEXT,
                 wish_type TEXT,
                 sentiment TEXT,
@@ -59,7 +60,6 @@ def init_database():
                 timezone TEXT
             )
             """)
-            
             db_connection.commit()
             print("✅ WishStone_Records 테이블이 생성되었습니다.")
         else:
@@ -87,7 +87,7 @@ def close_database():
         except Exception as e:
             print(f"❌ 데이터베이스 종료 오류: {str(e)}")
 
-def insert_record(user_text, wish_type, sentiment, country_name, current_time, utc_time, timezone):
+def insert_record(client_ip, user_text, wish_type, sentiment, country_name, current_time, utc_time, timezone):
     """데이터베이스에 레코드 삽입"""
     global db_connection
     
@@ -100,9 +100,10 @@ def insert_record(user_text, wish_type, sentiment, country_name, current_time, u
         
         cursor.execute("""
         INSERT INTO WishStone_Records 
-        (user_text, wish_type, sentiment, country_name, current_time, utc_time, timezone)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        (client_ip, user_text, wish_type, sentiment, country_name, current_time, utc_time, timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
+            client_ip,
             user_text,
             wish_type,
             sentiment,
@@ -122,6 +123,81 @@ def insert_record(user_text, wish_type, sentiment, country_name, current_time, u
         
     except Exception as e:
         print(f"❌ 데이터베이스 삽입 오류: {str(e)}")
+        return False
+
+def check_daily_limit():
+    """오늘 처리된 요청 수 확인 (제한: 100건/일)"""
+    global db_connection
+    
+    if not db_connection:
+        print("❌ 데이터베이스 연결이 없습니다.")
+        return False
+    
+    try:
+        cursor = db_connection.cursor()
+        
+        # 오늘 날짜 (UTC 기준)
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 오늘 처리된 요청 수 조회
+        cursor.execute("""
+        SELECT COUNT(*) FROM WishStone_Records 
+        WHERE DATE(utc_time) = ?
+        """, (today,))
+        
+        today_count = cursor.fetchone()[0]
+        
+        print(f"📊 오늘 처리된 요청 수: {today_count}/100")
+        
+        if today_count >= 100:
+            print("🚫 일일 처리 제한 초과!")
+            print(f"   • 오늘 이미 {today_count}건의 요청이 처리되었습니다.")
+            print("   • 일일 제한: 100건")
+            print("   • 내일 다시 시도해주세요.")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ 일일 제한 확인 오류: {str(e)}")
+        return False
+
+def check_ip_daily_limit(client_ip):
+    """특정 IP의 오늘 처리 횟수 확인 (제한: 1회/일)"""
+    global db_connection
+    
+    if not db_connection:
+        print("❌ 데이터베이스 연결이 없습니다.")
+        return False
+    
+    try:
+        cursor = db_connection.cursor()
+        
+        # 오늘 날짜 (UTC 기준)
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 해당 IP가 오늘 처리된 횟수 조회
+        cursor.execute("""
+        SELECT COUNT(*) FROM WishStone_Records 
+        WHERE DATE(utc_time) = ? AND client_ip = ?
+        """, (today, client_ip))
+        
+        ip_today_count = cursor.fetchone()[0]
+        
+        print(f"🔍 IP 확인: {client_ip}")
+        print(f"📊 해당 IP의 오늘 처리 횟수: {ip_today_count}/1")
+        
+        if ip_today_count >= 1:
+            print("🚫 IP별 일일 처리 제한 초과!")
+            print(f"   • IP {client_ip}는 오늘 이미 {ip_today_count}번 처리되었습니다.")
+            print("   • IP별 일일 제한: 1회")
+            print("   • 내일 다시 시도해주세요.")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ IP 일일 제한 확인 오류: {str(e)}")
         return False
 
 def analyze_text(text):
@@ -153,6 +229,20 @@ def process_all_info():
         current_time = data.get("current_time", "")
         utc_time = data.get("utc_time", "")
         country_name = data.get("country_name", "")
+        
+        # 일일 제한 확인 (100건/일)
+        if not check_daily_limit():
+            return jsonify({
+                "success": False,
+                "message": "일일 처리 제한을 초과했습니다. 내일 다시 시도해주세요. (제한: 100건/일)"
+            })
+        
+        # IP별 일일 제한 확인 (1회/일)
+        if not check_ip_daily_limit(client_ip):
+            return jsonify({
+                "success": False,
+                "message": f"해당 IP는 오늘 이미 처리되었습니다. 내일 다시 시도해주세요. (IP별 제한: 1회/일)"
+            })
         
         print("\n" + "="*60)
         print("📊 WishStone - 처리 결과")
@@ -197,6 +287,7 @@ def process_all_info():
         
         # 데이터베이스에 정보 저장
         db_success = insert_record(
+            client_ip=client_ip,
             user_text=user_text,
             wish_type=wish_type,
             sentiment=sentiment,
