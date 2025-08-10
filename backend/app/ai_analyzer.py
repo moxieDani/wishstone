@@ -1,6 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
 from .logger_config import ai_logger as logger
 
@@ -18,6 +19,7 @@ def _get_chain():
     global _llm, _chain
     if _chain is None:
         _llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0)
+        # _llm = ChatOllama(model="gpt-oss:120b", base_url="http://192.168.1.63:11434", temperature=0)
         prompt = PromptTemplate.from_template("{context}")
         _chain = prompt | _llm.with_structured_output(Category)
     return _chain
@@ -27,6 +29,7 @@ def analyze_text(text):
     try:
         chain = _get_chain()
         result = chain.invoke({"context": text})
+        print(result)
         return {
             "success": True,
             "wish_type": result.wish_type,

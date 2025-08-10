@@ -175,3 +175,6 @@ cython_debug/
 
 # SQLite database
 *.db
+
+# logs from *.py
+logs
